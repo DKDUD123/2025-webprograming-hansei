@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>랜덤추천기</title>
+
+<style>
+  :root{
+    --bg:#f3f6fb; --card:#ffffff; --text:#0b1220; --muted:#556078; --accent:#5b21b6;
+    --radius:12px; --gap:12px;
+  }
+  [data-theme="dark"]{
+    --bg:#071128; --card:#0b1220; --text:#e6eef8; --muted:#9fb0cf; --accent:#8b5cf6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,'Malgun Gothic',sans-serif;background:linear-gradient(180deg,var(--bg),#e6eef8 100%);color:var(--text);padding:20px;}
+  .wrap{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;}
+  header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px}
+  header .title{display:flex;flex-direction:column}
+  h1{margin:0;font-size:20px}
+  p.lead{margin:0;color:var(--muted);font-size:13px}
+
+  .card{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:0 6px 20px rgba(8,12,20,0.06);}
+  .controls{display:flex;flex-direction:column;gap:10px}
+
+  .row{display:flex;gap:8px;align-items:center}
+  input[type="text"], select, input[type="number"], textarea{
+    padding:10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);flex:1;background:transparent;color:var(--text);
+  }
+  button{padding:10px 12px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),#4c1d95);color:white;cursor:pointer}
+  .btn-ghost{background:transparent;border:1px solid rgba(0,0,0,0.06);color:var(--text);padding:8px 10px}
+
+  .list{max-height:320px;overflow:auto;padding-right:6px;display:flex;flex-direction:column;gap:8px}
+  .item{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent)}
+  .meta{font-size:12px;color:var(--muted)}
+  label.small{font-size:12px;color:var(--muted)}
+
+  .rightcol{display:flex;flex-direction:column;gap:12px}
+  .result{height:160px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;background:linear-gradient(180deg,rgba(91,33,182,0.06),transparent);border:1px dashed rgba(91,33,182,0.12)}
+
+  .flex-between{display:flex;justify-content:space-between;align-items:center}
+  footer{grid-column:1/-1;color:var(--muted);font-size:13px;margin-top:8px}
+
+  @media (max-width:980px){
+    .wrap{grid-template-columns:1fr}
+  }
+</style>
+</head>
+
+<body>
+<div class="wrap" id="app">
+  <header>
+    <div class="title">
+      <h1>랜덤추천기</h1>
+      <p class="lead">무작위 선택을 도와주는 간단한 추천 도구</p>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="meta" id="statusInfo">저장: 로컬</div>
+      <button id="themeToggle" class="btn-ghost">다크모드</button>
+    </div>
+  </header>
+
+  <main class="card">
+    <section class="controls">
+
+      <textarea id="projectDesc" rows="3" placeholder="설명을 적어보세요 (선택)"></textarea>
+
+      <div class="row">
+        <input id="itemInput" type="text" placeholder="예: 치킨, 영화…" />
+        <select id="categoryInput">
+          <option value="전체">전체</option>
+          <option value="음식">음식</option>
+          <option value="활동">활동</option>
+          <option value="취미">취미</option>
+          <option value="영화">영화/콘텐츠</option>
+          <option value="기타">기타</option>
+        </select>
+        <button id="addBtn">추가</button>
+      </div>
+
+      <div class="row">
+        <select id="filterCategory">
+          <option value="전체">전체</option>
+          <option value="음식">음식</option>
+          <option value="활동">활동</option>
+          <option value="취미">취미</option>
+          <option value="영화">영화/콘텐츠</option>
+          <option value="기타">기타</option>
+        </select>
+        <input id="countPick" type="number" min="1" value="1" style="width:80px">
+        <label><input type="checkbox" id="allowDup" checked> 중복허용</label>
+        <button id="randBtn">추천!</button>
+      </div>
+
+      <div class="list" id="itemsList"></div>
+    </section>
+  </main>
+
+  <aside class="card rightcol">
+    <div id="result" class="result">아직 추천이 없습니다.</div>
+  </aside>
+
+  <footer class="card">
+    프로젝트명: 랜덤추천기
+  </footer>
+</div>
+
+<script>
+/* ========= 상태 ========= */
+let items = JSON.parse(localStorage.getItem("items") || "[]");
+
+/* ========= DOM ========= */
+const itemInput = document.getElementById("itemInput");
+const categoryInput = document.getElementById("categoryInput");
+const itemsList = document.getElementById("itemsList");
+const addBtn = document.getElementById("addBtn");
+const randBtn = document.getElementById("randBtn");
+const filterCategory = document.getElementById("filterCategory");
+const resultBox = document.getElementById("result");
+const themeToggle = document.getElementById("themeToggle");
+
+/* ========= 저장 ========= */
+function save(){
+  localStorage.setItem("items", JSON.stringify(items));
+}
+
+/* ========= 렌더 ========= */
+function render(){
+  itemsList.innerHTML = "";
+  items.forEach((item, i)=>{
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `
+      <span>${item.text} <small>(${item.category})</small></span>
+      <button class="btn-ghost">삭제</button>
+    `;
+    div.querySelector("button").onclick = ()=>{
+      items.splice(i,1);
+      save(); render();
+    };
+    itemsList.appendChild(div);
+  });
+}
+
+/* ========= 항목 추가 ========= */
+addBtn.onclick = ()=>{
+  const text = itemInput.value.trim();
+  if(!text) return;
+  items.push({ text, category: categoryInput.value });
+  itemInput.value="";
+  save(); render();
+};
+
+/* ========= 추천 ========= */
+randBtn.onclick = ()=>{
+  const filtered = items.filter(i =>
+    filterCategory.value==="전체" || i.category===filterCategory.value
+  );
+  if(filtered.length===0){
+    resultBox.textContent = "추천할 항목이 없습니다.";
+    return;
+  }
+  const pick = filtered[Math.floor(Math.random()*filtered.length)];
+  resultBox.textContent = pick.text;
+};
+
+/* ========= 다크모드 ========= */
+themeToggle.onclick = ()=>{
+  const isDark = document.documentElement.getAttribute("data-theme")==="dark";
+  document.documentElement.setAttribute("data-theme", isDark?"light":"dark");
+};
+
+render();
+</script>
+</body>
+</html>
